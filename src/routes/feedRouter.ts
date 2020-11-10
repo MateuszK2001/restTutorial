@@ -1,7 +1,6 @@
-import express, { Router } from 'express';
+import express from 'express';
 import { deletePost, getPost, getPosts, postPost, putPost } from '../controllers/feedController';
 import {body} from 'express-validator';
-import {} from 'mongoose';
 import isAuth from '../middleware/isAuth';
 
 const feedRouter  = express.Router();

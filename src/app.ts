@@ -7,15 +7,17 @@ import dotenv from 'dotenv';
 import path from 'path';
 import HttpError from './Errors/HttpError';
 import authRouter from './routes/authRouter';
+import * as socket from './socket';
+
 dotenv.config();
 
 declare global {
     namespace Express {
-      interface Request {
+        interface Request {
         userId?: Types.ObjectId
-      }
+        }
     }
-  }
+}
 
 const app = express();
 
@@ -71,12 +73,17 @@ app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
     }
 });
 
-mongoose.connect(process.env.MONGO_KEY as string, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-    .then(() => {
-        app.listen(8000);
-    }).catch(err => {
-        console.log(err);
+try {
+    await mongoose.connect(process.env.MONGO_KEY as string, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true
     });
+    const server = app.listen(8000);
+    const io = socket.init(server);
+    io.on('connection', socket=>{
+        console.log('Client connected');
+        
+    });
+} catch (error) {
+    console.log(error);
+}

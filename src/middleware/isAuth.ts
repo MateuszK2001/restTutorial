@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { toHttpError } from '../controllers/helper';
 import HttpError from '../Errors/HttpError';
 
+
 const isAuth:RequestHandler = (req,res,next)=>{
     const authorizationHeader = req.get('Authorization');
     let decodedToken:any;
@@ -16,7 +17,7 @@ const isAuth:RequestHandler = (req,res,next)=>{
             throw new HttpError(401);
             
         req.userId = Types.ObjectId(decodedToken.userId);
-        
+
         next();
     } catch (error) {
         throw toHttpError(error);

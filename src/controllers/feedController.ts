@@ -1,14 +1,12 @@
 import { RequestHandler } from "express";
 import {validationResult} from 'express-validator';
 import {promises as fs} from 'fs'
-import { Types } from "mongoose";
-import { userInfo } from "os";
 import { resolve } from "path";
 import HttpError from "../Errors/HttpError";
 import Post, { IPost } from '../models/post';
-import User from "../models/user";
+import User, { IUser } from "../models/user";
 import { toHttpError } from "./helper";
-
+import {getIO} from '../socket';
 export const getPosts: RequestHandler = async (req, res, next) => {
   const currentPage = req.query.page?Number.parseInt(req.query.page as string) : 1;
   const perPage = 2;
@@ -17,7 +15,8 @@ export const getPosts: RequestHandler = async (req, res, next) => {
     const posts = await Post.find()
       .populate('creator')
       .skip((currentPage-1)*perPage)
-      .limit(perPage);
+      .limit(perPage)
+      .sort({createdAt: -1});
     res.json({
       message: 'Fetched post successfully',
       totalItems: totalItems,
@@ -53,6 +52,13 @@ export const postPost: RequestHandler = async (req, res, next) => {
       throw new Error("User doesn't exist");
     user.posts.push(post._id);
     await user.save();
+    getIO().emit('posts', {action: 'create', post: {
+      ...(post as any)._doc, 
+      creator:{
+        _id: req.userId,
+        name: user.name
+      }
+    }});
     res.status(201).json({
       post: post,
       creator:{
@@ -102,20 +108,30 @@ export const putPost: RequestHandler = async (req, res, next) => {
   const postId = req.params.postId;
   
   try {
-    const post = await Post.findById(postId);
-    if(!post || post.creator.toHexString() !== req.userId!.toHexString()){
+    const post = await Post.findById(postId).populate('creator');
+    if(!post || (post.creator as any as IUser)._id.toHexString() !== req.userId!.toHexString()){
       return next(new HttpError(403, undefined, "Post doesn't exist"));
     }
     if(imageUrl !== post.imageUrl){
       await deleteImage(post.imageUrl)
     }
 
-    await post.updateOne({
+    const newPost:IPost = {
       creator:req.userId!,
       title: title,
       content: content,
-      imageUrl: imageUrl
-    } as IPost); 
+      imageUrl: imageUrl,
+    } as IPost;
+    await post.updateOne(newPost); 
+
+    getIO().emit('posts', {action: 'update', post: {
+      ...(newPost as any), 
+      _id: post._id,
+      creator:{
+        _id: req.userId,
+        name: (post.creator as any as IUser).name
+      }
+    }});
 
     res.status(200).json({
       message: 'Post updated',
@@ -144,6 +160,8 @@ export const deletePost:RequestHandler = async (req,res,next)=>{
     await deleteImage(post.imageUrl);
     
     await post.deleteOne();
+
+    getIO().emit('posts', {action: 'delete', postId: postId});
 
     res.status(200).json({
       message: 'Post deleted',
